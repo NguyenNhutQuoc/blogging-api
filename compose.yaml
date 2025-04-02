@@ -1,0 +1,6 @@
+﻿services:
+  heartingproject:
+    image: heartingproject
+    build:
+      context: .
+      dockerfile: HeartingProject/Dockerfile

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using BloggingSystem.Application.Commons.Interfaces;
+using BloggingSystem.Infrastructure.Authorization;
 using BloggingSystem.Infrastructure.Identity;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
@@ -82,8 +83,13 @@ namespace BloggingSystem.Infrastructure.Authentication
                 // Register policies for all available permissions
                 var permissions = new[]
                 {
-                    "users.create", "users.read", "users.update", "users.delete",
-                    "roles.create", "roles.read", "roles.update", "roles.delete",
+                    "user.create", "user.read", "user.update", "user.delete",
+                    "role.create", "role.read", "role.update", "role.delete",
+                    "post.create", "post.read", "post.edit", "post.delete", "post.publish", "post.unpublish", "post.read-all",
+                    "comment.create", "comment.read", "comment.update", "comment.delete",
+                    "category.create", "category.read", "category.update", "category.delete",
+                    "tag.create", "tag.read", "tag.update", "tag.delete",
+                    "settings.update", "settings.read"
                 };
 
                 foreach (var permission in permissions)
@@ -91,6 +97,15 @@ namespace BloggingSystem.Infrastructure.Authentication
                     options.AddPolicy($"Permission:{permission}", policy =>
                         policy.Requirements.Add(new PermissionRequirement(permission)));
                 }
+                
+                options.AddPolicy("Permission:post.update", policy =>
+                    policy.Requirements.Add(new PostAuthorRequirement("post.update")));
+                options.AddPolicy("Permission:post.delete", policy =>
+                    policy.Requirements.Add(new PostAuthorRequirement("post.delete")));
+                options.AddPolicy("Permission:post.unpublish", policy =>
+                    policy.Requirements.Add(new PostAuthorRequirement("post.unpublish")));
+                options.AddPolicy("Permission:post.publish", policy =>
+                    policy.Requirements.Add(new PostPublishedRequirement("post.publish")));
             });
 
             return services;
@@ -110,7 +125,7 @@ namespace BloggingSystem.Infrastructure.Authentication
         {
             // Get all permission claims
             var permissions = context.User.Claims
-                .Where(c => c.Type == "permission")
+                .Where(c => c.Type == "permissions")
                 .Select(c => c.Value)
                 .ToList();
 

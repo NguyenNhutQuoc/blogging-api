@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using AutoMapper;
 using BloggingSystem.Application.Commons.Interfaces;
 using BloggingSystem.Application.Features.Comment;
@@ -40,13 +35,44 @@ namespace BloggingSystem.Application.Queries
 
         public async Task<PaginatedResponseDto<CommentDto>> Handle(GetCommentsQuery request, CancellationToken cancellationToken)
         {
-            var spec = new CommentsSpecification(request.PageNumber, request.PageSize);
-            var totalCount = await _commentRepository.CountAsync(new CommentsSpecification(), cancellationToken);
-            var comments = await _commentRepository.ListAsync(spec, cancellationToken);
+            // Lấy tất cả comment (không bao gồm replies) với phân trang
+            var parentCommentsSpec = new TopLevelCommentsSpecification(request.PageNumber, request.PageSize);
+            var totalCount = await _commentRepository.CountAsync(new TopLevelCommentsSpecification(), cancellationToken);
+            var parentComments = await _commentRepository.ListAsync(parentCommentsSpec, cancellationToken);
+
+            // Lấy ID của tất cả comment cha
+            var parentIds = parentComments.Select(c => c.Id).ToList();
+
+            // Lấy tất cả replies cho các comment cha trong một query duy nhất
+            var allRepliesSpec = new CommentRepliesForParentsSpecification(parentIds);
+            var allReplies = await _commentRepository.ListAsync(allRepliesSpec, cancellationToken);
+
+            // Map comment cha sang DTO
+            var commentsDto = _mapper.Map<List<CommentDto>>(parentComments);
+
+            // Gom nhóm replies theo ParentId
+            var repliesByParentId = allReplies?
+                .Where(r => r.ParentId.HasValue)
+                .GroupBy(r => r.ParentId.Value)
+                .ToDictionary(g => g.Key, g => g.ToList() as List<Comment?>) ?? new Dictionary<long, List<Comment?>>();
+
+            // Gán replies cho từng comment cha
+            for (int i = 0; i < commentsDto.Count; i++)
+            {
+                var commentId = parentComments[i].Id;
+                if (repliesByParentId.TryGetValue(commentId, out var commentReplies))
+                {
+                    commentsDto[i].Replies = _mapper.Map<List<CommentDto>>(commentReplies);
+                }
+                else
+                {
+                    commentsDto[i].Replies = new List<CommentDto>();
+                }
+            }
 
             return new PaginatedResponseDto<CommentDto>
             {
-                Data = _mapper.Map<List<CommentDto>>(comments),
+                Data = commentsDto,
                 PageIndex = request.PageNumber,
                 PageSize = request.PageSize,
                 TotalCount = totalCount,
@@ -85,10 +111,18 @@ namespace BloggingSystem.Application.Queries
             var spec = new CommentByIdSpecification(request.Id);
             var comment = await _commentRepository.FirstOrDefaultAsync(spec, cancellationToken);
 
+            var result = _mapper.Map<CommentDto>(comment);
+            // Add Replies
+            var repliesSpec = new CommentRepliesSpecification(request.Id);
+            
+            var replies = await _commentRepository.ListAsync(repliesSpec, cancellationToken);
+            
+            result.Replies = _mapper.Map<List<CommentDto>>(replies);
+
             if (comment == null)
                 throw new NotFoundException(nameof(Comment), request.Id);
 
-            return _mapper.Map<CommentDto>(comment);
+            return result;
         }
     }
 
@@ -230,7 +264,7 @@ namespace BloggingSystem.Application.Queries
 
     public class GetCommentsByStatusQuery : IRequest<PaginatedResponseDto<CommentDto>>
     {
-        public string Status { get; set; }
+        public string? Status { get; set; }
         public int PageNumber { get; set; } = 1;
         public int PageSize { get; set; } = 10;
     }

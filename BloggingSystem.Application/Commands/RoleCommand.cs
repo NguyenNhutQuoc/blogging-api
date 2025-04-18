@@ -12,16 +12,16 @@ namespace BloggingSystem.Application.Commands;
 
 public class CreateRoleCommand: IRequest<RoleDto>
 {
-    public string Name { get; set; }
-    public string Slug { get; set; }
-    public string Description { get; set; }
+    public string? Name { get; set; }
+    public string? Slug { get; set; }
+    public string? Description { get; set; }
 }
 
 public class UpdateRoleCommand: IRequest<RoleDto>
 {
     public long Id { get; set; }
-    public string Name { get; set; }
-    public string Description { get; set; }
+    public string? Name { get; set; }
+    public string? Description { get; set; }
 }
 
 public class CreateRoleCommandHandler : IRequestHandler<CreateRoleCommand, RoleDto>
@@ -36,6 +36,9 @@ public class CreateRoleCommandHandler : IRequestHandler<CreateRoleCommand, RoleD
     }
     public async Task<RoleDto> Handle(CreateRoleCommand request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(request.Name)) {
+            throw new ArgumentException("Permission name cannot be null or empty.", nameof(request.Name));
+        }
         var roleByName = new RoleByNameSpecification(request.Name);
         
         if (await _roleRepository.AnyAsync(roleByName))
@@ -144,11 +147,11 @@ public class GrantPermissionToRoleCommandHandler : IRequestHandler<GrantPermissi
         if (await _rolePermissionRepository.AnyAsync(rolePermissionSpec))
             throw new DomainException("Role already has the specified permission");
         
-        var rolePermission = new RolePermission(role.Id, permission.Id);
+        var rolePermission = RolePermission.Create(request.RoleId, request.PermissionId);
         
         await _rolePermissionRepository.AddAsync(rolePermission, cancellationToken);
-        
-        role.AddDomainEvent(new GrantedPermissionToRoleEvent(request.RoleId, request.PermissionId));
+
+        await _domainEventService.PublishEventsAsync(rolePermission.DomainEvents);
 
         return true;
     }
@@ -192,10 +195,12 @@ public class RevokePermissionFromRoleCommandHandler : IRequestHandler<RevokePerm
         
         if (rolePermission == null)
             throw new DomainException("Role permission not found");
+
+        rolePermission.Delete(roleId: request.RoleId, permissionId: request.PermissionId);
         
         await _rolePermissionRepository.DeleteAsync(rolePermission, cancellationToken);
         
-        role.AddDomainEvent(new RevokedPermissionFromRoleEvent(request.RoleId, request.PermissionId));
+        await _domainEventService.PublishEventsAsync(rolePermission.DomainEvents);
 
         return true;
     }

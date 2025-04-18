@@ -13,7 +13,6 @@ namespace BloggingSystem.API.Controllers
     [ApiController]
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/users")] 
-    [Authorize]
     public class UsersController : ControllerBase
     {
         private readonly IMediator _mediator;
@@ -28,6 +27,7 @@ namespace BloggingSystem.API.Controllers
         }
         
         [HttpGet("me")]
+        [Authorize]
         public async Task<IActionResult> GetCurrentUser()
         {
             var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
@@ -174,6 +174,7 @@ namespace BloggingSystem.API.Controllers
         /// Update user profile
         /// </summary>
         [HttpPut("{userId}/profile")]
+        [Authorize]
         public async Task<ActionResult<UserDto>> UpdateProfile(long userId, UpdateUserProfileCommand command)
         {
             if (userId != command.UserId)
@@ -190,6 +191,7 @@ namespace BloggingSystem.API.Controllers
         /// Change password
         /// </summary>
         [HttpPost("{userId}/change-password")]
+        [Authorize]
         public async Task<ActionResult> ChangePassword(long userId, ChangePasswordCommand command)
         {
             if (userId != command.UserId)
@@ -206,6 +208,7 @@ namespace BloggingSystem.API.Controllers
         /// Activate user
         /// </summary>
         [HttpPost("{userId}/activate")]
+        [Authorize]
         public async Task<ActionResult> Activate(long userId)
         {
             var command = new ActivateUserCommand { UserId = userId };
@@ -218,6 +221,7 @@ namespace BloggingSystem.API.Controllers
         /// Deactivate user
         /// </summary>
         [HttpPost("{userId}/deactivate")]
+        [Authorize]
         public async Task<ActionResult> Deactivate(long userId)
         {
             var command = new DeactivateUserCommand { UserId = userId };
@@ -230,6 +234,7 @@ namespace BloggingSystem.API.Controllers
         /// Assign role to user
         /// </summary>
         [HttpPost("{userId}/assign-role")]
+        [Authorize]
         public async Task<ActionResult> AssignRole(long userId, AssignRoleToUserCommand command)
         {
             if (userId != command.UserId)
@@ -246,6 +251,7 @@ namespace BloggingSystem.API.Controllers
         /// Remove role from user
         /// </summary>
         [HttpPost("{userId}/remove-role")]
+        [Authorize]
         public async Task<ActionResult> RemoveRole(long userId, RevokeRoleFromUserCommand command)
         {
             if (userId != command.UserId)

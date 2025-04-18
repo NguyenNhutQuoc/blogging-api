@@ -11,13 +11,13 @@ namespace BloggingSystem.Domain.Entities;
 
 public partial class Role: BaseEntity
 {
-    private string? _name;
-    private string? _slug;
-    private string? _description;
+    private string _name;
+    private string _slug;
+    private string _description;
     private List<RolePermission> _rolePermissions = new List<RolePermission>();
     private List<UserRole> _userRoles = new List<UserRole>();
 
-    public string? Name
+    public string Name
     {
         get => _name;
         private set
@@ -28,7 +28,7 @@ public partial class Role: BaseEntity
         }
     }
 
-    public string? Slug
+    public string Slug
     {
         get => _slug;
         private set
@@ -39,7 +39,7 @@ public partial class Role: BaseEntity
         }
     }
 
-    public string? Description
+    public string Description
     {
         get => _description;
         private set

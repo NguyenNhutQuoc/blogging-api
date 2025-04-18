@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using BloggingSystem.Application.Commands;
+using BloggingSystem.Application.Commons.Interfaces;
+using BloggingSystem.Application.Features.Comment;
 using BloggingSystem.Application.Queries;
 using BloggingSystem.Domain.Entities;
 using BloggingSystem.Shared.DTOs;
@@ -13,15 +15,18 @@ using Microsoft.Extensions.Logging;
 namespace BloggingSystem.API.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [ApiVersion("1")]
+    [Route("api/v{version:apiVersion}/[controller]")]
     public class CommentsController : ControllerBase
     {
         private readonly IMediator _mediator;
+        private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<CommentsController> _logger;
 
-        public CommentsController(IMediator mediator, ILogger<CommentsController> logger)
+        public CommentsController(IMediator mediator, ICurrentUserService currentUserService, ILogger<CommentsController> logger)
         {
             _mediator = mediator;
+            _currentUserService = currentUserService;
             _logger = logger;
         }
 
@@ -29,7 +34,6 @@ namespace BloggingSystem.API.Controllers
         /// Get all comments with pagination
         /// </summary>
         [HttpGet]
-        [Authorize(Policy = "ManageComments")]
         [ProducesResponseType(typeof(PaginatedResponseDto<CommentDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -99,8 +103,11 @@ namespace BloggingSystem.API.Controllers
             [FromQuery] int pageSize = 10)
         {
             // Check if the user is requesting their own comments or is an admin
-            var currentUserId = long.Parse(User.FindFirst("sub")?.Value ?? "0");
-            var isAdmin = User.IsInRole("Admin"); // Adjust based on your authorization scheme
+            if (!_currentUserService.UserId.HasValue)
+                return Unauthorized();
+
+            var currentUserId = _currentUserService.UserId.Value;
+            var isAdmin = _currentUserService.IsInRole("Admin");
             
             if (currentUserId != userId && !isAdmin)
                 return Forbid();
@@ -193,15 +200,10 @@ namespace BloggingSystem.API.Controllers
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult<CommentDto>> CreateComment([FromBody] CreateCommentDto dto)
         {
-            // Get the current user's ID from claims
-            var userId = long.Parse(User.FindFirst("sub")?.Value ?? "0");
-            if (userId == 0)
-                return Unauthorized();
             
-            var command = new CreateCommentCommand
+            var command = new CreateCommentCommand()
             {
                 PostId = dto.PostId,
-                UserId = userId,
                 ParentId = dto.ParentId,
                 Content = dto.Content
             };
@@ -223,9 +225,10 @@ namespace BloggingSystem.API.Controllers
         public async Task<ActionResult<CommentDto>> UpdateComment(long id, [FromBody] UpdateCommentDto dto)
         {
             // Get the current user's ID from claims
-            var userId = long.Parse(User.FindFirst("sub")?.Value ?? "0");
-            if (userId == 0)
+            if (!_currentUserService.UserId.HasValue)
                 return Unauthorized();
+
+            var userId = _currentUserService.UserId.Value;
             
             var command = new UpdateCommentCommand
             {
@@ -249,13 +252,14 @@ namespace BloggingSystem.API.Controllers
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> DeleteComment(long id)
         {
-            // Get the current user's ID from claims
-            var userId = long.Parse(User.FindFirst("sub")?.Value ?? "0");
-            if (userId == 0)
+            // Get the current moderator's ID from claims
+            if (!_currentUserService.UserId.HasValue)
                 return Unauthorized();
+            // Get the current user's ID from claims
+            var userId = _currentUserService.UserId.Value;
             
             // Check if user is admin
-            var isAdmin = User.IsInRole("Admin"); // Adjust based on your authorization scheme
+            var isAdmin = _currentUserService.IsInRole("Admin");
             
             var command = new DeleteCommentCommand
             {
@@ -281,7 +285,10 @@ namespace BloggingSystem.API.Controllers
         public async Task<ActionResult<CommentDto>> ModerateComment(long id, [FromBody] ModerateCommentDto dto)
         {
             // Get the current moderator's ID from claims
-            var moderatorId = long.Parse(User.FindFirst("sub")?.Value ?? "0");
+            if (!_currentUserService.UserId.HasValue)
+                return Unauthorized();
+
+            var moderatorId = _currentUserService.UserId.Value;
             if (moderatorId == 0)
                 return Unauthorized();
             
@@ -292,7 +299,7 @@ namespace BloggingSystem.API.Controllers
             var command = new ModerateCommentCommand
             {
                 Id = id,
-                Status = dto.Status,
+                Status = Comment.MapStatus(dto.Status),
                 ModeratorId = moderatorId,
                 ModeratorNote = dto.ModeratorNote
             };

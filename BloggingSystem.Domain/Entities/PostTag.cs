@@ -1,11 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 using BloggingSystem.Domain.Commons;
 
 namespace BloggingSystem.Domain.Entities;
 
 public partial class PostTag: BaseEntity
 {
+    
+    [NotMapped]
+    public DateTime UpdatedAt { get; set; }
     public long Id { get; set; }
 
     public long PostId { get; set; }

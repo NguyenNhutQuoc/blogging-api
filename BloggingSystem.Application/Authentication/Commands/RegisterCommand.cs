@@ -16,6 +16,11 @@ namespace BloggingSystem.Application.Authentication.Commands
         public string Password { get; set; } = null!;
         public string IpAddress { get; set; } = null!;
         public string UserAgent { get; set; } = null!;
+        
+        public string? DisplayName { get; set; }
+        public string? Bio { get; set; }
+        public string? Image { get; set; }
+        
     }
 
     public class RegisterCommandHandler : IRequestHandler<RegisterCommand, AuthenticationResult>
@@ -26,6 +31,7 @@ namespace BloggingSystem.Application.Authentication.Commands
         private readonly IRepository<Role> _roleRepository;
         private readonly IPasswordHasher _passwordHasher;
         private readonly IJwtGenerator _jwtGenerator;
+        private readonly IRepository<UserProfile> _profileRepository;
         private readonly IMapper _mapper;
         private readonly IDomainEventService _domainEventService;
 
@@ -36,6 +42,7 @@ namespace BloggingSystem.Application.Authentication.Commands
             IRepository<Role> roleRepository,
             IPasswordHasher passwordHasher,
             IJwtGenerator jwtGenerator,
+            IRepository<UserProfile> profileRepository,
             IMapper mapper, IDomainEventService domainEventService)
         {
             _userRepository = userRepository;
@@ -44,6 +51,7 @@ namespace BloggingSystem.Application.Authentication.Commands
             _roleRepository = roleRepository;
             _passwordHasher = passwordHasher;
             _jwtGenerator = jwtGenerator;
+            _profileRepository = profileRepository;
             _mapper = mapper;
             _domainEventService = domainEventService;
         }
@@ -67,12 +75,11 @@ namespace BloggingSystem.Application.Authentication.Commands
             // Create new user
             var user = User.Create(request.Username, request.Email, passwordHash);
             user.Activate(); // Auto-activate for now, could be changed to require email verification
-
             await _userRepository.AddAsync(user, cancellationToken);
             await _domainEventService.PublishEventsAsync(user.DomainEvents);
 
             // Assign default user role
-            var roleBySlugSpec = new RoleBySlugSpecification("user");
+            var roleBySlugSpec = new RoleBySlugSpecification("author");
             var defaultRole = await _roleRepository.FirstOrDefaultAsync(roleBySlugSpec, cancellationToken);
             if (defaultRole != null)
             {
@@ -95,9 +102,26 @@ namespace BloggingSystem.Application.Authentication.Commands
             // Create user session
             var session = UserSession.Create(user.Id, refreshToken, request.IpAddress, request.UserAgent,
                 DateTime.UtcNow.AddDays(7));
+            
+            // Create profile
+            var displayName = string.IsNullOrWhiteSpace(request.DisplayName) ? request.Username : request.DisplayName;
+            var profile = UserProfile.Create(user.Id, displayName);
+            if (!string.IsNullOrWhiteSpace(request.Bio))
+            {
+                profile.UpdateBasicInfo(displayName, request.Bio, "");
+            }
+            
+            if (!string.IsNullOrWhiteSpace(request.Image))
+            {
+                profile.UpdateAvatarUrl(request.Image);
+            }
+            
+            // Save profile
+            await _profileRepository.AddAsync(profile, cancellationToken);
 
             await _sessionRepository.AddAsync(session, cancellationToken);
             await _domainEventService.PublishEventsAsync(session.DomainEvents);
+            await _domainEventService.PublishEventsAsync(profile.DomainEvents);
 
             return new AuthenticationResult
             {

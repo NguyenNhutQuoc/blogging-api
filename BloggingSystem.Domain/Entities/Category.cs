@@ -20,7 +20,7 @@ public partial class Category:BaseEntity
 
     public virtual ICollection<PostCategory> PostCategories { get; set; } = new List<PostCategory>();
 
-    private Category()
+    public Category()
     {
         
     }

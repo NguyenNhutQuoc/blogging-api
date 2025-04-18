@@ -434,6 +434,13 @@ public partial class BloggingDbContext : DbContext
                 .HasDefaultValueSql("CURRENT_TIMESTAMP")
                 .HasColumnType("timestamp")
                 .HasColumnName("updated_at");
+            entity.Property(e => e.PublicId)
+                .HasMaxLength(255)
+                .HasColumnName("public_id");
+            entity.Property(e => e.Width)
+                .HasColumnName("width");
+            entity.Property(e => e.Height)
+                .HasColumnName("height");
             entity.Property(e => e.UserId).HasColumnName("user_id");
 
             entity.HasOne(d => d.User).WithMany(p => p.Media)
@@ -769,6 +776,12 @@ public partial class BloggingDbContext : DbContext
                 .HasDefaultValueSql("CURRENT_TIMESTAMP")
                 .HasColumnType("timestamp")
                 .HasColumnName("updated_at");
+            entity.Property(e => e.DeletedAt)
+                .HasColumnType("timestamp")
+                .HasColumnName("deleted_at");
+            entity.Property(e => e.ETag)
+                .HasMaxLength(255)
+                .HasColumnName("e_tag");
             entity.Property(e => e.ViewsCount)
                 .HasDefaultValueSql("'0'")
                 .HasColumnName("views_count");

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations.Schema;
 using BloggingSystem.Domain.Commons;
+using BloggingSystem.Domain.Events;
 
 namespace BloggingSystem.Domain.Entities;
 
@@ -27,5 +28,17 @@ public partial class RolePermission: BaseEntity
     {
         RoleId = roleId;
         PermissionId = permissionId;
+    }
+
+    public static RolePermission Create(long roleId, long permissionId) {
+        var rolePermission = new RolePermission(roleId, permissionId);
+
+        rolePermission.AddDomainEvent(new GrantedPermissionToRoleEvent(roleId, permissionId));
+
+        return rolePermission;
+    }
+
+    public void Delete(long roleId, long permissionId) {
+        AddDomainEvent(new RevokedPermissionFromRoleEvent(roleId, permissionId));
     }
 }

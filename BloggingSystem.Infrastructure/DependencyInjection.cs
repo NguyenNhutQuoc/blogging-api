@@ -2,6 +2,7 @@
 using BloggingSystem.Application.Commons.Interfaces;
 using BloggingSystem.Infrastructure.Data;
 using BloggingSystem.Infrastructure.Services;
+using BloggingSystem.Infrastructure.Settings;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,6 +25,8 @@ namespace BloggingSystem.Infrastructure
                     configuration.GetConnectionString("DefaultConnection"),
                     ServerVersion.AutoDetect(configuration.GetConnectionString("DefaultConnection")),
                     b => b.MigrationsAssembly(typeof(BloggingDbContext).Assembly.FullName)));
+            
+            services.Configure<CloudinarySettings>( configuration.GetSection("CloudinarySettings"));
                     
             // Add repositories
             services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
@@ -39,6 +42,15 @@ namespace BloggingSystem.Infrastructure
             
             services.AddScoped<IAuditLogService, AuditLogService>();
             services.AddScoped<ISlugService, SlugService>();
+            
+            services.AddScoped<ICurrentUserService, CurrentUserService>();
+            services.AddScoped<IDateTime, DateTimeService>();
+            
+            services.Configure<S3Settings>(configuration.GetSection("S3"));
+            services.AddScoped<IFileStorageService, S3StorageService>();
+
+            // Đăng ký Adapter để chuyển từ ICloudinaryService sang IFileStorageService
+            services.AddScoped<ICloudinaryService, CloudinaryToS3Adapter>();
             
             return services;
         }

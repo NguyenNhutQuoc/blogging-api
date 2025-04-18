@@ -114,93 +114,101 @@ public partial class User: BaseEntity
     private User() {}
     
     // Constructor cho domain logic với tham số bắt buộc
-        private User(string username, string email, string passwordHash)
-         {
-             Username = username;
-             Email = email;
-             PasswordHash = passwordHash;
-             IsActive = false; // Mặc định chưa active
-             
-             ValidateState();
-         }
-         
-         // Factory method cho việc tạo User mới
-         public static User Create(string username, string email, string passwordHash)
-         {
-             var user = new User(username, email, passwordHash);
-             
-             // Thêm domain event
-             user.AddDomainEvent(new UserCreatedEvent(user.Id));
-             
-             return user;
-         }
-         
-         // Domain methods
-         public void Activate()
-         {
-             if (IsActive)
-                 throw new DomainException("User is already active");
-                 
-             IsActive = true;
-             SetModified();
-             
-             AddDomainEvent(new UserActivatedEvent(Id));
-         }
-         
-         public void Deactivate()
-         {
-             if (!IsActive)
-                 throw new DomainException("User is already inactive");
-                 
-             IsActive = false;
-             SetModified();
-             
-             AddDomainEvent(new UserDeactivatedEvent(Id));
-         }
-         
-         public void ChangeEmail(string newEmail)
-         {
-             if (Email == newEmail)
-                 throw new DomainException("New email is the same as current email");
-                 
-             Email = newEmail;
-             SetModified();
-             
-             AddDomainEvent(new UserEmailChangedEvent(Id, newEmail));
-         }
-         
-         public void ChangePassword(string newPasswordHash)
-         {
-             if (string.IsNullOrWhiteSpace(newPasswordHash))
-                 throw new DomainException("Password hash cannot be empty");
-                 
-             PasswordHash = newPasswordHash;
-             SetModified();
-             
-             AddDomainEvent(new UserPasswordChangedEvent(Id));
-         }
-         
-         // Helper methods
-         private void ValidateState()
-         {
-             if (string.IsNullOrWhiteSpace(Username))
-                 throw new DomainException("Username cannot be empty");
-                 
-             if (string.IsNullOrWhiteSpace(Email) || !IsValidEmail(Email))
-                 throw new DomainException("Invalid email format");
-             
-             if (Regex.IsMatch(Username, AppConstants.RegexPatterns.Username))
-                 throw new DomainException("Invalid username format");
-         }
-         
-         private bool IsValidEmail(string email)
-         {
-             try {
-                 var addr = new System.Net.Mail.MailAddress(email);
-                 return addr.Address == email;
-             }
-             catch {
-                 return false;
-             }
-         }
+    private User(string username, string email, string passwordHash)
+    {
+        Username = username;
+        Email = email;
+        PasswordHash = passwordHash;
+        IsActive = false; // Mặc định chưa active
+        
+        ValidateState();
+    }
+    
+    // Factory method cho việc tạo User mới
+    public static User Create(string username, string email, string passwordHash)
+    {
+        var user = new User(username, email, passwordHash);
+        
+        // Thêm domain event
+        user.AddDomainEvent(new UserCreatedEvent(user.Id));
+        
+        return user;
+    }
+    
+    // Domain methods
+    public void Activate()
+    {
+        if (IsActive)
+            throw new DomainException("User is already active");
+            
+        IsActive = true;
+        SetModified();
+        
+        AddDomainEvent(new UserActivatedEvent(Id));
+    }
+    
+    public void Deactivate()
+    {
+        if (!IsActive)
+            throw new DomainException("User is already inactive");
+            
+        IsActive = false;
+        SetModified();
+        
+        AddDomainEvent(new UserDeactivatedEvent(Id));
+    }
+    
+    public void ChangeEmail(string newEmail)
+    {
+        if (Email == newEmail)
+            throw new DomainException("New email is the same as current email");
+            
+        Email = newEmail;
+        SetModified();
+        
+        AddDomainEvent(new UserEmailChangedEvent(Id, newEmail));
+    }
+    
+    public void ChangePassword(string newPasswordHash)
+    {
+        if (string.IsNullOrWhiteSpace(newPasswordHash))
+            throw new DomainException("Password hash cannot be empty");
+            
+        PasswordHash = newPasswordHash;
+        SetModified();
+        
+        AddDomainEvent(new UserPasswordChangedEvent(Id));
+    }
+    
+    // Helper methods
+    private void ValidateState()
+    {
+        if (string.IsNullOrWhiteSpace(Username))
+            throw new DomainException("Username cannot be empty");
+            
+        if (string.IsNullOrWhiteSpace(Email) || !IsValidEmail(Email))
+            throw new DomainException("Invalid email format");
+        
+        if (Regex.IsMatch(Username, AppConstants.RegexPatterns.Username))
+            throw new DomainException("Invalid username format");
+    }
+    
+    private bool IsValidEmail(string email)
+    {
+        try {
+            var addr = new System.Net.Mail.MailAddress(email);
+            return addr.Address == email;
+        }
+        catch {
+            return false;
+        }
+    }
+    
+    public void AssignRole(long userId, long roleId ) {
+        AddDomainEvent(new UserRoleAssignedEvent(userId, roleId));
+    }
+
+    public void UnAssignRole(long userId, long roleId) {
+        AddDomainEvent(new UserRoleRemovedEvent(userId, roleId));
+    }
 }

@@ -12,11 +12,13 @@ namespace BloggingSystem.Application.Features.Post
     {
         public PostSpecification(long id)
             : base(p => p.Id == id)
-        {
+        { 
             AddInclude(p => p.Author);
-            AddInclude("Categories");
-            AddInclude("Tags");
-            AddInclude("Comments.User");
+            AddInclude(p => p.PostCategories);
+            AddInclude(p => p.PostTags);
+            AddInclude("PostCategories.Category");
+            AddInclude("PostTags.Tag");
+            ApplyOrderByDescending(p => p.CreatedAt);
         }
     }
 
@@ -29,9 +31,11 @@ namespace BloggingSystem.Application.Features.Post
             : base(p => p.Slug == slug)
         {
             AddInclude(p => p.Author);
-            AddInclude("Categories");
-            AddInclude("Tags");
-            AddInclude("Comments.User");
+            AddInclude(p => p.PostCategories);
+            AddInclude(p => p.PostTags);
+            AddInclude(p => p.Comments);
+            AddInclude("PostCategories.Category");
+            AddInclude("PostTags.Tag");
         }
     }
 
@@ -60,7 +64,7 @@ namespace BloggingSystem.Application.Features.Post
     public class PublishedPostsSpecification : BaseSpecification<Domain.Entities.Post>
     {
         public PublishedPostsSpecification()
-            : base(p => p.Status == "published" && p.PublishedAt <= DateTime.UtcNow)
+            : base(p => p.Status == "published")
         {
             AddInclude(p => p.Author);
             ApplyOrderByDescending(p => p.PublishedAt);
@@ -70,6 +74,10 @@ namespace BloggingSystem.Application.Features.Post
         public PublishedPostsSpecification(int pageNumber, int pageSize)
             : this()
         {
+            AddInclude(p => p.PostCategories);
+            AddInclude(p => p.PostTags);
+            AddInclude("PostCategories.Category");
+            AddInclude("PostTags.Tag");
             ApplyPaging((pageNumber - 1) * pageSize, pageSize);
         }
     }
@@ -93,6 +101,26 @@ namespace BloggingSystem.Application.Features.Post
             ApplyPaging((pageNumber - 1) * pageSize, pageSize);
         }
     }
+    
+    /// <summary>
+    /// Search posts by author ID with optional paging
+    /// </summary>
+    public class PostsByAuthorSearchSpecification : BaseSpecification<Domain.Entities.Post>
+    {
+        public PostsByAuthorSearchSpecification(long authorId, string searchTerm)
+            : base(p => p.AuthorId == authorId && (p.Title.Contains(searchTerm) || p.Content.Contains(searchTerm) || p.Excerpt.Contains(searchTerm)))
+        {
+            AddInclude(p => p.Author);
+            ApplyOrderByDescending(p => p.CreatedAt);
+            DisableTracking();
+        }
+
+        public PostsByAuthorSearchSpecification(long authorId, string searchTerm, int pageNumber, int pageSize)
+            : this(authorId, searchTerm)
+        {
+            ApplyPaging((pageNumber - 1) * pageSize, pageSize);
+        }
+    }
 
     /// <summary>
     /// Get posts by category ID with optional paging
@@ -103,7 +131,10 @@ namespace BloggingSystem.Application.Features.Post
             : base(p => p.PostCategories.Any(c => c.CategoryId == categoryId))
         {
             AddInclude(p => p.Author);
-            AddInclude("Categories");
+            AddInclude(p => p.PostCategories);
+            AddInclude(p => p.PostTags);
+            AddInclude("PostCategories.Category");
+            AddInclude("PostTags.Tag");
             ApplyOrderByDescending(p => p.CreatedAt);
             DisableTracking();
         }
@@ -145,6 +176,10 @@ namespace BloggingSystem.Application.Features.Post
             : base(p => p.Title.Contains(searchTerm) || p.Content.Contains(searchTerm) || p.Excerpt.Contains(searchTerm))
         {
             AddInclude(p => p.Author);
+            AddInclude(p => p.PostCategories);
+            AddInclude("PostCategories.Category");
+            AddInclude(p => p.PostTags);
+            AddInclude("PostTags.Tag");
             ApplyOrderByDescending(p => p.CreatedAt);
             DisableTracking();
         }
@@ -153,6 +188,34 @@ namespace BloggingSystem.Application.Features.Post
             : this(searchTerm)
         {
             ApplyPaging((pageNumber - 1) * pageSize, pageSize);
+        }
+    }
+    
+    
+    public class PublishedPostsByAuthorSpecification: BaseSpecification<Domain.Entities.Post>
+    {
+        public PublishedPostsByAuthorSpecification(long authorId)
+            : base(p => p.AuthorId == authorId && p.Status == "published" && p.PublishedAt <= DateTime.UtcNow)
+        {
+            AddInclude(p => p.Author);
+            ApplyOrderByDescending(p => p.PublishedAt);
+            DisableTracking();
+        }
+
+        public PublishedPostsByAuthorSpecification(long authorId, int pageNumber, int pageSize)
+            : this(authorId)
+        {
+            ApplyPaging((pageNumber - 1) * pageSize, pageSize);
+        }
+    }
+    
+    public class PostByIdWithAuthorSpecification : BaseSpecification<Domain.Entities.Post>
+    {
+        public PostByIdWithAuthorSpecification(long id)
+            : base(p => p.Id == id)
+        {
+            AddInclude(p => p.Author);
+            AddInclude("Author.UserProfile");
         }
     }
 }

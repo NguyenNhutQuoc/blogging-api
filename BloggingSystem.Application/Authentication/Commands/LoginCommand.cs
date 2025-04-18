@@ -56,7 +56,7 @@ namespace BloggingSystem.Application.Authentication.Commands
                 throw new AuthenticationException("User account is not active");
 
             // Verify password
-            if (!_passwordHasher.VerifyPassword(request.Password, user.PasswordHash))
+            if (!_passwordHasher.VerifyPassword(user.PasswordHash, request.Password))
                 throw new AuthenticationException("Invalid credentials");
 
             // Get user roles and permissions

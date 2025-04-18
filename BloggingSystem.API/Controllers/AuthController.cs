@@ -1,5 +1,3 @@
-using System;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using MediatR;
@@ -37,6 +35,9 @@ namespace BloggingSystem.API.Controllers
                     Username = request.Username,
                     Email = request.Email,
                     Password = request.Password,
+                    DisplayName = request.Username,
+                    Bio = request.Bio,
+                    Image = request.Image,
                     IpAddress = GetIpAddress(),
                     UserAgent = GetUserAgent()
                 };
@@ -188,6 +189,9 @@ namespace BloggingSystem.API.Controllers
         public string Email { get; set; } = null!;
         public string Password { get; set; } = null!;
         public string ConfirmPassword { get; set; } = null!;
+        public string? Bio { get; set; }
+        public string? Image { get; set; }
+        public string? DisplayName { get; set; }
     }
 
     public class LoginRequest

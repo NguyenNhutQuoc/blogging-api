@@ -1,7 +1,5 @@
-using System.Threading;
-using System.Threading.Tasks;
+
 using BloggingSystem.Application.Commons.Interfaces;
-using BloggingSystem.Application.Features.Comment;
 using BloggingSystem.Domain.Entities;
 using BloggingSystem.Domain.Events;
 using BloggingSystem.Domain.Exceptions;
@@ -9,58 +7,56 @@ using BloggingSystem.Shared.DTOs;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
-namespace BloggingSystem.Application.Commands
+namespace BloggingSystem.Application.Features.Comment
 {
     #region Create Comment Command
 
     public class CreateCommentCommand : IRequest<CommentDto>
     {
         public long PostId { get; set; }
-        public long UserId { get; set; }
         public long? ParentId { get; set; }
-        public string Content { get; set; }
+        public string? Content { get; set; }
     }
 
     public class CreateCommentCommandHandler : IRequestHandler<CreateCommentCommand, CommentDto>
     {
-        private readonly IRepository<Comment> _commentRepository;
-        private readonly IRepository<Post> _postRepository;
-        private readonly IRepository<User> _userRepository;
+        private readonly IRepository<Domain.Entities.Comment> _commentRepository;
+        private readonly IRepository<Domain.Entities.Post> _postRepository;
         private readonly IDomainEventService _domainEventService;
+        private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<CreateCommentCommandHandler> _logger;
 
         public CreateCommentCommandHandler(
-            IRepository<Comment> commentRepository,
-            IRepository<Post> postRepository,
-            IRepository<User> userRepository,
+            IRepository<Domain.Entities.Comment> commentRepository,
+            IRepository<Domain.Entities.Post> postRepository,
             IDomainEventService domainEventService,
+            ICurrentUserService currentUserService,
             ILogger<CreateCommentCommandHandler> logger)
         {
             _commentRepository = commentRepository;
             _postRepository = postRepository;
-            _userRepository = userRepository;
             _domainEventService = domainEventService;
+            _currentUserService = currentUserService;
             _logger = logger;
         }
 
         public async Task<CommentDto> Handle(CreateCommentCommand request, CancellationToken cancellationToken)
         {
+            // Validate user
+            var currentUserId = _currentUserService.UserId;
+            if (!currentUserId.HasValue)
+                throw new UnauthorizedAccessException("User not authenticated");
             // Validate post exists
             var post = await _postRepository.GetByIdAsync(request.PostId, cancellationToken);
             if (post == null)
                 throw new DomainException("Post not found");
-
-            // Validate user exists
-            var user = await _userRepository.GetByIdAsync(request.UserId, cancellationToken);
-            if (user == null)
-                throw new DomainException("User not found");
 
             // Validate post allows comments
             if (post.CommentStatus != "open")
                 throw new DomainException("Comments are closed for this post");
             
             // Create the comment
-            var comment = Comment.Create(request.PostId, request.UserId, request.Content);
+            var comment = Domain.Entities.Comment.Create(request.PostId, currentUserId.Value, request.Content ?? "");
             
             if (request.ParentId.HasValue)
             {
@@ -74,9 +70,6 @@ namespace BloggingSystem.Application.Commands
             }
             
             comment.UpdateStatus(CommentStatus.Approved);
-            
-            // Add domain event
-            comment.AddDomainEvent(new CommentAddedEvent(comment.Id, comment.PostId, comment.UserId));
 
             // Save the comment
             await _commentRepository.AddAsync(comment, cancellationToken);
@@ -97,8 +90,8 @@ namespace BloggingSystem.Application.Commands
                 UpdatedAt = comment.UpdatedAt,
                 User = new UserSummaryDto
                 {
-                    Id = user.Id,
-                    Username = user.Username
+                    Id = _currentUserService.UserId ?? 0,
+                    Username = _currentUserService.Username
                 },
                 Post = new PostSummaryDto
                 {
@@ -118,19 +111,19 @@ namespace BloggingSystem.Application.Commands
     {
         public long Id { get; set; }
         public long UserId { get; set; } // User performing the update
-        public string Content { get; set; }
+        public string? Content { get; set; }
     }
 
     public class UpdateCommentCommandHandler : IRequestHandler<UpdateCommentCommand, CommentDto>
     {
-        private readonly IRepository<Comment> _commentRepository;
-        private readonly IRepository<User> _userRepository;
+        private readonly IRepository<Domain.Entities.Comment> _commentRepository;
+        private readonly IRepository<Domain.Entities.User> _userRepository;
         private readonly IDomainEventService _domainEventService;
         private readonly ILogger<UpdateCommentCommandHandler> _logger;
 
         public UpdateCommentCommandHandler(
-            IRepository<Comment> commentRepository,
-            IRepository<User> userRepository,
+            IRepository<Domain.Entities.Comment> commentRepository,
+            IRepository<Domain.Entities.User> userRepository,
             IDomainEventService domainEventService,
             ILogger<UpdateCommentCommandHandler> logger)
         {
@@ -156,13 +149,12 @@ namespace BloggingSystem.Application.Commands
                 throw new DomainException("You cannot edit this comment in its current state");
 
             // Update the comment
-            comment.Content = request.Content;
+            comment.Update(request.Content ?? "");
 
             // If comment was already approved, it may need re-approval
             if (comment.Status == "approved")
             {
-                comment.Status = "pending";
-                comment.AddDomainEvent(new CommentUpdatedEvent(comment.Id, comment.PostId, comment.UserId, CommentStatus.Approved));
+                comment.UpdateStatus(CommentStatus.Pending);
             }
 
             // Save the comment
@@ -187,8 +179,8 @@ namespace BloggingSystem.Application.Commands
                 UpdatedAt = comment.UpdatedAt,
                 User = new UserSummaryDto
                 {
-                    Id = user.Id,
-                    Username = user.Username
+                    Id = user?.Id ?? 0,
+                    Username = user?.Username ?? ""
                 }
             };
         }
@@ -207,12 +199,12 @@ namespace BloggingSystem.Application.Commands
 
     public class DeleteCommentCommandHandler : IRequestHandler<DeleteCommentCommand, bool>
     {
-        private readonly IRepository<Comment> _commentRepository;
+        private readonly IRepository<Domain.Entities.Comment> _commentRepository;
         private readonly IDomainEventService _domainEventService;
         private readonly ILogger<DeleteCommentCommandHandler> _logger;
 
         public DeleteCommentCommandHandler(
-            IRepository<Comment> commentRepository,
+            IRepository<Domain.Entities.Comment> commentRepository,
             IDomainEventService domainEventService,
             ILogger<DeleteCommentCommandHandler> logger)
         {
@@ -232,9 +224,6 @@ namespace BloggingSystem.Application.Commands
             if (!request.IsAdmin && comment.UserId != request.UserId)
                 throw new DomainException("You don't have permission to delete this comment");
 
-            // Add domain event
-            comment.AddDomainEvent(new CommentUpdatedEvent(comment.Id, comment.PostId, comment.UserId, CommentStatus.Trash));
-
             // Delete the comment
             await _commentRepository.DeleteAsync(comment, cancellationToken);
 
@@ -252,21 +241,21 @@ namespace BloggingSystem.Application.Commands
     public class ModerateCommentCommand : IRequest<CommentDto>
     {
         public long Id { get; set; }
-        public string Status { get; set; } // "approved", "rejected", "spam"
+        public CommentStatus Status { get; set; } // "approved", "rejected", "spam"
         public long ModeratorId { get; set; }
-        public string ModeratorNote { get; set; }
+        public string? ModeratorNote { get; set; }
     }
 
     public class ModerateCommentCommandHandler : IRequestHandler<ModerateCommentCommand, CommentDto>
     {
-        private readonly IRepository<Comment> _commentRepository;
-        private readonly IRepository<User> _userRepository;
+        private readonly IRepository<Domain.Entities.Comment> _commentRepository;
+        private readonly IRepository<Domain.Entities.User> _userRepository;
         private readonly IDomainEventService _domainEventService;
         private readonly ILogger<ModerateCommentCommandHandler> _logger;
 
         public ModerateCommentCommandHandler(
-            IRepository<Comment> commentRepository,
-            IRepository<User> userRepository,
+            IRepository<Domain.Entities.Comment> commentRepository,
+            IRepository<Domain.Entities.User> userRepository,
             IDomainEventService domainEventService,
             ILogger<ModerateCommentCommandHandler> logger)
         {
@@ -284,26 +273,11 @@ namespace BloggingSystem.Application.Commands
                 throw new DomainException("Comment not found");
 
             // Validate status
-            if (request.Status != "approved" && request.Status != "rejected" && request.Status != "spam")
+            if (request.Status != CommentStatus.Approved && request.Status != CommentStatus.Spam && request.Status != CommentStatus.Trash)
                 throw new DomainException("Invalid status value");
 
-            // Save old status for event
-            var oldStatus = comment.Status;
-
             // Update status
-            comment.Status = request.Status;
-
-            // Add appropriate domain event
-            switch (request.Status)
-            {
-                case "approved":
-                    comment.AddDomainEvent(new CommentUpdatedEvent(comment.Id, comment.PostId, comment.UserId, CommentStatus.Approved));
-                    break;
-                case "rejected":
-                case "spam":
-                    comment.AddDomainEvent(new CommentUpdatedEvent(comment.Id, comment.PostId, comment.UserId, CommentStatus.Spam));
-                    break;
-            }
+            comment.UpdateStatus(request.Status);
 
             // Save the comment
             await _commentRepository.UpdateAsync(comment, cancellationToken);
@@ -322,13 +296,13 @@ namespace BloggingSystem.Application.Commands
                 UserId = comment.UserId,
                 ParentId = comment.ParentId,
                 Content = comment.Content,
-                Status = comment.Status,
+                Status = request.Status.ToString(),
                 CreatedAt = comment.CreatedAt,
                 UpdatedAt = comment.UpdatedAt,
                 User = new UserSummaryDto
                 {
-                    Id = user.Id,
-                    Username = user.Username
+                    Id = user?.Id ?? 0,
+                    Username = user?.Username ?? ""
                 }
             };
         }

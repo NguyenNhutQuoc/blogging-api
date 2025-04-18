@@ -14,11 +14,11 @@ namespace BloggingSystem.Application.Commands
 
     public class RegisterUserCommand : IRequest<UserDto>
     {
-        public string Username { get; set; }
-        public string Email { get; set; }
-        public string Password { get; set; }
-        public string DisplayName { get; set; }
-        public string Bio { get; set; }
+        public string? Username { get; set; }
+        public string? Email { get; set; }
+        public string? Password { get; set; }
+        public string? DisplayName { get; set; }
+        public string? Bio { get; set; }
     }
 
     public class RegisterUserCommandHandler : IRequestHandler<RegisterUserCommand, UserDto>
@@ -46,6 +46,16 @@ namespace BloggingSystem.Application.Commands
         public async Task<UserDto> Handle(RegisterUserCommand request, CancellationToken cancellationToken)
         {
             // Check if username already exists
+            if (string.IsNullOrEmpty(request.Username)) {
+                throw new ArgumentException("Username cannot be null or empty.", nameof(request.Username));
+            }
+
+            if (string.IsNullOrEmpty(request.Email)) {
+                throw new ArgumentException("Email cannot be null or empty.", nameof(request.Email));
+            }
+            if (string.IsNullOrEmpty(request.Password)) {
+                throw new ArgumentException("Password cannot be null or empty.", nameof(request.Password));
+            }
             var usernameSpec = new UserByUsernameSpecification(request.Username);
             if (await _userRepository.AnyAsync(usernameSpec, cancellationToken))
             {
@@ -392,7 +402,7 @@ namespace BloggingSystem.Application.Commands
             await _userRoleRepository.AddAsync(userRole, cancellationToken);
 
             // Add domain event
-            user.AddDomainEvent(new UserRoleAssignedEvent(user.Id, role.Id));
+            user.AssignRole(user.Id, role.Id);
 
             // Publish domain events
             await _domainEventService.PublishEventsAsync(user.DomainEvents);
@@ -459,7 +469,7 @@ namespace BloggingSystem.Application.Commands
             await _userRoleRepository.DeleteAsync(userRole, cancellationToken);
 
             // Add domain event
-            user.AddDomainEvent(new UserRoleRemovedEvent(user.Id, role.Id));
+            user.UnAssignRole(user.Id, role.Id);
 
             // Publish domain events
             await _domainEventService.PublishEventsAsync(user.DomainEvents);

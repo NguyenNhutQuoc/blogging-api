@@ -1,4 +1,5 @@
 
+using BloggingSystem.Application.Commons.Interfaces;
 using BloggingSystem.Application.Features.Post.Command;
 using BloggingSystem.Application.Queries;
 using BloggingSystem.Shared.DTOs;
@@ -9,22 +10,27 @@ using Microsoft.AspNetCore.Mvc;
 namespace BloggingSystem.API.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/posts")]
     public class PostsController : ControllerBase
     {
         private readonly IMediator _mediator;
         private readonly ILogger<PostsController> _logger;
+        private readonly ICurrentUserService _currentUserService;
 
-        public PostsController(IMediator mediator, ILogger<PostsController> logger)
+        public PostsController(IMediator mediator, ILogger<PostsController> logger,
+            ICurrentUserService currentUserService)
         {
             _mediator = mediator;
             _logger = logger;
+            _currentUserService = currentUserService;
         }
 
         /// <summary>
         /// Get all posts with pagination
         /// </summary>
         [HttpGet]
+        [Authorize("Permission:post.read-all")]
         [ProducesResponseType(typeof(PaginatedResponseDto<PostSummaryDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<PaginatedResponseDto<PostSummaryDto>>> GetPosts(
             [FromQuery] int pageNumber = 1,
@@ -56,7 +62,9 @@ namespace BloggingSystem.API.Controllers
             };
 
             var result = await _mediator.Send(query);
-            return Ok(result);
+            return Ok(ResponseDto<PaginatedResponseDto<PostSummaryDto>>.SuccessResponse(result, "Posts retrieved successfully"));
+
+
         }
 
         /// <summary>
@@ -68,8 +76,32 @@ namespace BloggingSystem.API.Controllers
         public async Task<ActionResult<PostDto>> GetPostById(long id)
         {
             var query = new GetPostByIdQuery { Id = id };
-            var result = await _mediator.Send(query);
-            return Ok(result);
+            var post = await _mediator.Send(query);
+
+            // Check If-None-Match header
+            var requestETag = Request.Headers.IfNoneMatch.ToString();
+            if (!string.IsNullOrEmpty(requestETag) && requestETag == post.ETag)
+            {
+                // If ETag matches, return 304 Not Modified
+                return StatusCode(StatusCodes.Status304NotModified);
+            }
+
+            // Check If-Modified-Since header
+            if (Request.Headers.IfModifiedSince.Count > 0)
+            {
+                var ifModifiedSince = Request.Headers.IfModifiedSince[0];
+                if (DateTime.TryParse(ifModifiedSince, out var modifiedSince))
+                {
+                    if (post.UpdatedAt <= modifiedSince)
+                    {
+                        return StatusCode(StatusCodes.Status304NotModified);
+                    }
+                }
+            }
+    
+            // Return the post data
+            return Ok(post);
+
         }
 
         /// <summary>
@@ -96,7 +128,7 @@ namespace BloggingSystem.API.Controllers
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10)
         {
-            var query = new GetPostsByAuthorQuery
+            var query = new GetPostsPublishedByAuthorQuery
             {
                 AuthorId = authorId,
                 PageNumber = pageNumber,
@@ -161,7 +193,7 @@ namespace BloggingSystem.API.Controllers
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10)
         {
-            var query = new SearchPostsQuery
+            var query = new SearchPostsPublishedQuery
             {
                 SearchTerm = searchTerm,
                 PageNumber = pageNumber,
@@ -171,11 +203,55 @@ namespace BloggingSystem.API.Controllers
             var result = await _mediator.Send(query);
             return Ok(result);
         }
+
         /// <summary>
+        /// Get my posts
+        /// </summary>
+        [HttpGet("my-posts")]
+        [Authorize]
+        [ProducesResponseType(typeof(PaginatedResponseDto<PostSummaryDto>), StatusCodes.Status200OK)]
+        public async Task<ActionResult<PaginatedResponseDto<PostSummaryDto>>> GetMyPosts(
+            [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+        {
+            var userId = _currentUserService.UserId;
+            var query = new GetPostsByAuthorQuery()
+            {
+                AuthorId = userId ?? 0,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+
+            var result = await _mediator.Send(query);
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// Search my posts
+        /// </summary>
+        [HttpGet("my-posts/search")]
+        [Authorize]
+        [ProducesResponseType(typeof(PaginatedResponseDto<PostSummaryDto>), StatusCodes.Status200OK)]
+        public async Task<ActionResult<PaginatedResponseDto<PostSummaryDto>>> SearchMyPosts(
+            [FromQuery] string searchTerm, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+        {
+            var userId = _currentUserService.UserId;
+            var query = new SearchPostsByAuthorQuery()
+            {
+                SearchTerm = searchTerm,
+                AuthorId = userId?? 0,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+
+            var result = await _mediator.Send(query);
+            return Ok(result);
+        }
+
+    /// <summary>
         /// Create a new post
         /// </summary>
         [HttpPost]
-        [Authorize(Policy = "CreatePost")]
+        [Authorize(Policy = "Permission:post.create")]
         [ProducesResponseType(typeof(PostDto), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -190,7 +266,7 @@ namespace BloggingSystem.API.Controllers
         /// Update an existing post
         /// </summary>
         [HttpPut("{id:long}")]
-        [Authorize(Policy = "UpdatePost")]
+        [Authorize(Policy = "Permission:post.edit")]
         [ProducesResponseType(typeof(PostDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -209,7 +285,7 @@ namespace BloggingSystem.API.Controllers
         /// Delete a post
         /// </summary>
         [HttpDelete("{id:long}")]
-        [Authorize(Policy = "DeletePost")]
+        [Authorize(Policy = "Permission:post.delete")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -225,7 +301,7 @@ namespace BloggingSystem.API.Controllers
         /// Publish a post
         /// </summary>
         [HttpPost("{id:long}/publish")]
-        [Authorize(Policy = "PublishPost")]
+        [Authorize(Policy = "Permission:post.publish")]
         [ProducesResponseType(typeof(PostDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -237,12 +313,27 @@ namespace BloggingSystem.API.Controllers
             var result = await _mediator.Send(command);
             return Ok(result);
         }
+        
+        
+        [HttpPost("{id:long}/unpublish")]
+        [Authorize(Policy = "Permission:post.unpublish")]
+        [ProducesResponseType(typeof(PostDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> UnpublishPost(long id)
+        {
+            var command = new UnpublishPostCommand { Id = id };
+            var result = await _mediator.Send(command);
+            return Ok(result);
+        }
 
         /// <summary>
         /// Archive a post
         /// </summary>
         [HttpPost("{id:long}/archive")]
-        [Authorize(Policy = "ArchivePost")]
+        [Authorize(Policy = "Permission:post.archive")]
         [ProducesResponseType(typeof(PostDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]

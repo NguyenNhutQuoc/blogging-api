@@ -42,6 +42,7 @@ public partial class Permission: BaseEntity
         
         permission.AddDomainEvent(new CreatedPermissionEvent(permission.Id, permission.Name));
         
+        
         return permission;
     }
     

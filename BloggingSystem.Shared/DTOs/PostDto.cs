@@ -10,7 +10,12 @@ public class PostDto
     public string? FeaturedImageUrl { get; set; }
     public string Status { get; set; }
     public string CommentStatus { get; set; }
+    
+    public AuthorDto Author { get; set; }
+    public List<CategoryDto> Categories { get; set; }
+    public List<TagDto> Tags { get; set; }
     public long ViewsCount { get; set; }
+    public string ETag { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? PublishedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
@@ -25,6 +30,8 @@ public class PostSummaryDto
     public string Title { get; set; }
     public string Slug { get; set; }
     public string? Excerpt { get; set; }
+    public List<CategoryDto> Categories { get; set; }
+    public List<TagDto> Tags { get; set; }
     public string? FeaturedImageUrl { get; set; }
     public string Status { get; set; }
     public long ViewsCount { get; set; }
@@ -32,4 +39,6 @@ public class PostSummaryDto
     public DateTime? PublishedAt { get; set; }
         
     public AuthorDto Author { get; set; }
+    public DateTime? LikeAt { get; set; }
+    public int WordCount { get; set; }
 }

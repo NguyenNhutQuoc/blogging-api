@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using BloggingSystem.Shared.DTOs;
 
 namespace BloggingSystem.Shared.DTOs
@@ -155,4 +156,10 @@ namespace BloggingSystem.Shared.DTOs
     }
 }
 
-public class AuthorDto: UserDto {}
+public class AuthorDto : UserDto
+{
+    [JsonIgnore]
+    public List<RoleDto> Roles { get; set; } = new List<RoleDto>();
+    [JsonIgnore]
+    public List<SocialAuthDto> SocialAuths { get; set; } = new List<SocialAuthDto>();
+}

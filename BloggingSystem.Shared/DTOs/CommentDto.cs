@@ -12,13 +12,13 @@ namespace BloggingSystem.Shared.DTOs
         public long PostId { get; set; }
         public long UserId { get; set; }
         public long? ParentId { get; set; }
-        public string Content { get; set; }
-        public string Status { get; set; }
+        public string? Content { get; set; }
+        public string? Status { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
         
-        public PostSummaryDto Post { get; set; }
-        public UserSummaryDto User { get; set; }
+        public PostSummaryDto? Post { get; set; }
+        public UserSummaryDto? User { get; set; }
         public List<CommentDto> Replies { get; set; } = new List<CommentDto>();
     }
     
@@ -29,7 +29,7 @@ namespace BloggingSystem.Shared.DTOs
     {
         public long PostId { get; set; }
         public long? ParentId { get; set; }
-        public string Content { get; set; }
+        public string? Content { get; set; }
     }
     
     /// <summary>
@@ -37,7 +37,7 @@ namespace BloggingSystem.Shared.DTOs
     /// </summary>
     public class UpdateCommentDto
     {
-        public string Content { get; set; }
+        public string? Content { get; set; }
     }
     
     /// <summary>
@@ -45,7 +45,7 @@ namespace BloggingSystem.Shared.DTOs
     /// </summary>
     public class ModerateCommentDto
     {
-        public string Status { get; set; }
-        public string ModeratorNote { get; set; }
+        public string? Status { get; set; }
+        public string? ModeratorNote { get; set; }
     }
 }

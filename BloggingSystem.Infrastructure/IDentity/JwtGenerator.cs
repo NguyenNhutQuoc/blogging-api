@@ -31,7 +31,7 @@ namespace BloggingSystem.Infrastructure.Identity
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new Claim(ClaimTypes.Name, user.Username),
-                new Claim(ClaimTypes.Email, user.Email)
+                new Claim(ClaimTypes.Email, user.Email),
             };
 
             // Add roles to claims
@@ -43,7 +43,7 @@ namespace BloggingSystem.Infrastructure.Identity
             // Add permissions to claims
             foreach (var permission in permissions)
             {
-                claims.Add(new Claim("permission", permission.Slug));
+                claims.Add(new Claim("permissions", permission.Slug));
             }
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.Secret));

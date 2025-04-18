@@ -169,4 +169,28 @@ namespace BloggingSystem.Application.Features.Comment
             DisableTracking();
         }
     }
+    
+    public class TopLevelCommentsSpecification : BaseSpecification<Domain.Entities.Comment>
+    {
+        public TopLevelCommentsSpecification()
+            : base(c => c.ParentId == null)
+        {
+        }
+
+        public TopLevelCommentsSpecification(int pageIndex, int pageSize)
+            : base(c => c.ParentId == null)
+        {
+            ApplyOrderBy(c => c.CreatedAt);
+            ApplyPaging((pageIndex - 1) * pageSize, pageSize);
+        }
+    }
+
+    public class CommentRepliesForParentsSpecification : BaseSpecification<Domain.Entities.Comment>
+    {
+        public CommentRepliesForParentsSpecification(List<long> parentIds)
+            : base(c => c.ParentId.HasValue && parentIds.Contains(c.ParentId.Value))
+        {
+            ApplyOrderBy(c => c.CreatedAt);
+        }
+    }
 }

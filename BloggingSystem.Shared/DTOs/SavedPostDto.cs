@@ -1,0 +1,1 @@
+namespace BloggingSystem.Shared.DTOs;

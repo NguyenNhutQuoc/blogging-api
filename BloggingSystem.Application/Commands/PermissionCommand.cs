@@ -11,27 +11,37 @@ namespace BloggingSystem.Application.Commands;
 
 public class CreatePermissionCommand : IRequest<PermissionDto>
 {
-    public string Name { get; set; }
-    public string Module { get; set; }
-    public string Description { get; set; }
+    public string? Name { get; set; }
+    public string? Module { get; set; }
+    public string? Description { get; set; }
 }
 
 public class CreatePermissionCommandHandler : IRequestHandler<CreatePermissionCommand, PermissionDto>
 {
     private readonly IMapper _mapper;
     private readonly IRepository<Permission> _permissionRepository;
+    private readonly IDomainEventService _domainEventService;
     
-    public CreatePermissionCommandHandler(IRepository<Permission> permissionRepository, IMapper mapper)
+    public CreatePermissionCommandHandler(IRepository<Permission> permissionRepository, IDomainEventService domainEventService, IMapper mapper)
     {
         _permissionRepository = permissionRepository;
+        _domainEventService = domainEventService;
         _mapper = mapper;
     }
     
     public async Task<PermissionDto> Handle(CreatePermissionCommand request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(request.Name))
+            throw new ArgumentException("Permission name cannot be null or empty.", nameof(request.Name));
+        
+        if (string.IsNullOrWhiteSpace(request.Module))
+            throw new ArgumentException("Permission module cannot be null or empty.", nameof(request.Module));
+        
         var permission = Permission.Create(request.Name, request.Module, request.Description);
         
         await _permissionRepository.AddAsync(permission, cancellationToken);
+
+        await _domainEventService.PublishEventsAsync(permission.DomainEvents);
         
         return _mapper.Map<PermissionDto>(permission);
     }
@@ -44,20 +54,22 @@ public class CreatePermissionCommandHandler : IRequestHandler<CreatePermissionCo
 public class UpdatePermissionCommand : IRequest<PermissionDto>
 {
     public long Id { get; set; }
-    public string Name { get; set; }
-    public string Module { get; set; }
-    public string Description { get; set; }
+    public string? Name { get; set; }
+    public string? Module { get; set; }
+    public string? Description { get; set; }
 }
 
 public class UpdatePermissionCommandHandler : IRequestHandler<UpdatePermissionCommand, PermissionDto>
 {
     private readonly IMapper _mapper;
+    private readonly IDomainEventService _domainEventService;
     private readonly IRepository<Permission> _permissionRepository;
     
-    public UpdatePermissionCommandHandler(IRepository<Permission> permissionRepository, IMapper mapper)
+    public UpdatePermissionCommandHandler(IRepository<Permission> permissionRepository, IDomainEventService domainEventService, IMapper mapper)
     {
         _permissionRepository = permissionRepository;
         _mapper = mapper;
+        _domainEventService = domainEventService;
     }
     
     public async Task<PermissionDto> Handle(UpdatePermissionCommand request, CancellationToken cancellationToken)
@@ -67,9 +79,17 @@ public class UpdatePermissionCommandHandler : IRequestHandler<UpdatePermissionCo
         if (permission == null)
             throw new NotFoundException(nameof(Permission), request.Id);
         
+        if (string.IsNullOrWhiteSpace(request.Name))
+            throw new ArgumentException("Permission name cannot be null or empty.", nameof(request.Name));
+        
+        if (string.IsNullOrWhiteSpace(request.Module))
+            throw new ArgumentException("Permission module cannot be null or empty.", nameof(request.Module));
+        
         permission.Update(request.Name, request.Module, request.Description);
         
         await _permissionRepository.UpdateAsync(permission);
+
+        await _domainEventService.PublishEventsAsync(permission.DomainEvents);
         
         return _mapper.Map<PermissionDto>(permission);
     }
@@ -87,10 +107,12 @@ public class DeletePermissionCommand : IRequest<Unit>
 public class DeletePermissionCommandHandler : IRequestHandler<DeletePermissionCommand, Unit>
 {
     private readonly IRepository<Permission> _permissionRepository;
+    private readonly IDomainEventService _domainEventService;
     
-    public DeletePermissionCommandHandler(IRepository<Permission> permissionRepository)
+    public DeletePermissionCommandHandler(IRepository<Permission> permissionRepository, IDomainEventService domainEventService)
     {
         _permissionRepository = permissionRepository;
+        _domainEventService = domainEventService;
     }
     
     public async Task<Unit> Handle(DeletePermissionCommand request, CancellationToken cancellationToken)
@@ -103,6 +125,8 @@ public class DeletePermissionCommandHandler : IRequestHandler<DeletePermissionCo
         permission.Delete();
         
         await _permissionRepository.DeleteAsync(permission);
+
+        await _domainEventService.PublishEventsAsync(permission.DomainEvents);
         
         return Unit.Value;
     }

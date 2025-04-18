@@ -1,6 +1,8 @@
+using AutoMapper;
 using BloggingSystem.Application.Commons.Interfaces;
 using BloggingSystem.Application.Features.PostCategory;
 using BloggingSystem.Application.Features.PostTag;
+using BloggingSystem.Application.Features.Revisions;
 using BloggingSystem.Domain.Entities;
 using BloggingSystem.Domain.Events;
 using BloggingSystem.Domain.Exceptions;
@@ -15,10 +17,10 @@ namespace BloggingSystem.Application.Features.Post.Command
     public class CreatePostCommand : IRequest<PostDto>
     {
         public long AuthorId { get; set; }
-        public string Title { get; set; }
-        public string Content { get; set; }
+        public string? Title { get; set; }
+        public string? Content { get; set; }
         public string? Excerpt { get; set; }
-        public string? FeaturedImageUrl { get; set; }
+        public int? MediaId { get; set; }
         public List<long> CategoryIds { get; set; } = new List<long>();
         public List<long> TagIds { get; set; } = new List<long>();
     }
@@ -27,10 +29,12 @@ namespace BloggingSystem.Application.Features.Post.Command
     {
         private readonly IRepository<Domain.Entities.Post> _postRepository;
         private readonly IRepository<Domain.Entities.User> _userRepository;
-        private readonly IRepository<Category> _categoryRepository;
-        private readonly IRepository<Tag> _tagRepository;
+        private readonly IRepository<Domain.Entities.Category> _categoryRepository;
+        private readonly IRepository<Domain.Entities.Tag> _tagRepository;
+        private readonly IRepository<Medium> _mediaRepository;
         private readonly IRepository<Domain.Entities.PostCategory> _postCategoryRepository;
         private readonly IRepository<Domain.Entities.PostTag> _postTagRepository;
+        private readonly IRepository<PostMedium> _postMediumRepository;
         private readonly IDomainEventService _domainEventService;
         private readonly ISlugService _slugService;
         private readonly ILogger<CreatePostCommandHandler> _logger;
@@ -38,10 +42,12 @@ namespace BloggingSystem.Application.Features.Post.Command
         public CreatePostCommandHandler(
             IRepository<Domain.Entities.Post> postRepository,
             IRepository<Domain.Entities.User> userRepository,
-            IRepository<Category> categoryRepository,
-            IRepository<Tag> tagRepository,
+            IRepository<Domain.Entities.Category> categoryRepository,
+            IRepository<Domain.Entities.Tag> tagRepository,
             IRepository<Domain.Entities.PostCategory> postCategoryRepository,
             IRepository<Domain.Entities.PostTag> postTagRepository,
+            IRepository<Medium> mediaRepository,
+            IRepository<PostMedium> postMediumRepository,
             IDomainEventService domainEventService,
             ISlugService slugService,
             ILogger<CreatePostCommandHandler> logger)
@@ -52,6 +58,8 @@ namespace BloggingSystem.Application.Features.Post.Command
             _tagRepository = tagRepository;
             _postCategoryRepository = postCategoryRepository;
             _postTagRepository = postTagRepository;
+            _mediaRepository = mediaRepository;
+            _postMediumRepository = postMediumRepository;
             _domainEventService = domainEventService;
             _slugService = slugService;
             _logger = logger;
@@ -66,25 +74,42 @@ namespace BloggingSystem.Application.Features.Post.Command
             // Generate slug from title
             var baseSlug = _slugService.GenerateSlug(request.Title);
             var slug = baseSlug;
-            var count = 0;
 
             // Create post
             var post = Domain.Entities.Post.CreatePost(slug: slug, content: request.Content, title: request.Title,
                 authorId: request.AuthorId, excerpt: request.Excerpt ?? string.Empty);
 
-            post.FeaturedImageUrl = request.FeaturedImageUrl;
+            if (request.MediaId != null)
+            {
+                // Check if media exists
+                var media = await _mediaRepository.GetByIdAsync(request.MediaId.Value, cancellationToken);
+                if (media == null)
+                    throw new DomainException("Media not found");
+
+                // Set featured image URL
+                post.FeaturedImageUrl = media.FilePath;
+            }
 
             // Set published date if the post is being published directly
             if (post.Status == "published")
             {
-                post.PublishedAt = DateTime.UtcNow;
+                post.Publish();
             }
-
-            // Add domain event
-            post.AddDomainEvent(new PostCreatedEvent(post.Id, post.AuthorId, post.Title, post.Slug));
 
             // Save post
             await _postRepository.AddAsync(post, cancellationToken);
+            
+            if (request.MediaId != null)
+            {
+                // Check if media exists
+                var media = await _mediaRepository.GetByIdAsync(request.MediaId.Value, cancellationToken);
+                if (media == null)
+                    throw new DomainException("Media not found");
+                // Create post medium
+                var postMedium = PostMedium.Create(post.Id, media.Id, 0);
+                
+                await _postMediumRepository.AddAsync(postMedium, cancellationToken);
+            }
 
             // Add categories
             foreach (var categoryId in request.CategoryIds)
@@ -147,20 +172,22 @@ namespace BloggingSystem.Application.Features.Post.Command
     {
         private readonly IRepository<Domain.Entities.Post> _postRepository;
         private readonly IRepository<Domain.Entities.User> _userRepository;
-        private readonly IRepository<Category> _categoryRepository;
-        private readonly IRepository<Tag> _tagRepository;
+        private readonly IRepository<Domain.Entities.Category> _categoryRepository;
+        private readonly IRepository<Domain.Entities.Tag> _tagRepository;
         private readonly IRepository<Domain.Entities.PostCategory> _postCategoryRepository;
         private readonly IRepository<Domain.Entities.PostTag> _postTagRepository;
+        private readonly IRepository<Revision> _revisionRepository;
         private readonly IDomainEventService _domainEventService;
         private readonly ILogger<UpdatePostCommandHandler> _logger;
 
         public UpdatePostCommandHandler(
             IRepository<Domain.Entities.Post> postRepository,
             IRepository<Domain.Entities.User> userRepository,
-            IRepository<Category> categoryRepository,
-            IRepository<Tag> tagRepository,
+            IRepository<Domain.Entities.Category> categoryRepository,
+            IRepository<Domain.Entities.Tag> tagRepository,
             IRepository<Domain.Entities.PostCategory> postCategoryRepository,
             IRepository<Domain.Entities.PostTag> postTagRepository,
+            IRepository<Revision> revisionRepository,
             IDomainEventService domainEventService,
             ILogger<UpdatePostCommandHandler> logger)
         {
@@ -170,6 +197,7 @@ namespace BloggingSystem.Application.Features.Post.Command
             _tagRepository = tagRepository;
             _postCategoryRepository = postCategoryRepository;
             _postTagRepository = postTagRepository;
+            _revisionRepository = revisionRepository;
             _domainEventService = domainEventService;
             _logger = logger;
         }
@@ -179,28 +207,40 @@ namespace BloggingSystem.Application.Features.Post.Command
             var post = await _postRepository.GetByIdAsync(request.Id, cancellationToken);
             if (post == null)
                 throw new DomainException("Post not found");
+            
+            // Check iof the post is already published, cannot be  updated
+            if (post.Status == "published")
+                throw new DomainException("Post is already published and cannot be updated");
 
             var wasPublished = post.Status == "published";
             var isPublishedNow = request.Status == "published";
+            
+            // Lưu nội dung cũ trước khi update
+            string oldContent = post.Content;
+
+            // Lấy revision number cao nhất
+            var latestRevisionSpec = new MaxRevisionNumberByPostSpecification(post.Id);
+            var latestRevision = await _revisionRepository.FirstOrDefaultAsync(latestRevisionSpec, cancellationToken);
+            
+            int latestRevisionNumber = latestRevision?.RevisionNumber ?? 0;
+            int newRevisionNumber = latestRevisionNumber + 1;
+            
+            // Create new revision
+            var revisionPost = Revision.Create(
+                postId: post.Id,
+                userId: post.AuthorId,
+                content: oldContent,
+                revisionNumber: newRevisionNumber
+            );
+            await _revisionRepository.AddAsync(revisionPost, cancellationToken);
 
             // Update post
-            post.Title = request.Title;
-            post.Excerpt = request.Excerpt;
-            post.Content = request.Content;
-            post.FeaturedImageUrl = request.FeaturedImageUrl;
-            post.Status = request.Status;
-            post.CommentStatus = request.CommentStatus;
-
+            post.Update(request.Title, post.Slug, request.Title, request.Excerpt, request.FeaturedImageUrl, request.Status, request.CommentStatus);
             // If post is being published for the first time, set published date
             if (!wasPublished && isPublishedNow)
             {
-                post.PublishedAt = DateTime.UtcNow;
-                post.AddDomainEvent(new PostPublishedEvent(post.Id, post.AuthorId, post.Title, post.Slug,
-                    post.PublishedAt.Value));
+                post.Publish();
             }
-
-            // Add update event
-            post.AddDomainEvent(new PostUpdatedEvent(post.Id, post.AuthorId, post.Title, post.Slug));
 
             // Update post
             await _postRepository.UpdateAsync(post, cancellationToken);
@@ -210,6 +250,7 @@ namespace BloggingSystem.Application.Features.Post.Command
             var existingPostCategories = await _postCategoryRepository.ListAsync(postCategorySpec, cancellationToken);
 
             // Remove categories that are no longer associated
+            // TODO: Optimize this
             foreach (var postCategory in existingPostCategories)
             {
                 if (!request.CategoryIds.Contains(postCategory.CategoryId))
@@ -219,6 +260,7 @@ namespace BloggingSystem.Application.Features.Post.Command
             }
 
             // Add new categories
+            // TODO: Optimize this
             var existingCategoryIds = existingPostCategories.Select(pc => pc.CategoryId).ToList();
             foreach (var categoryId in request.CategoryIds)
             {
@@ -234,6 +276,7 @@ namespace BloggingSystem.Application.Features.Post.Command
             }
 
             // Update tags - get existing tags
+            // TODO: Optimize this
             var postTagSpec = new PostTagByPostIdSpecification(post.Id);
             var existingPostTags = await _postTagRepository.ListAsync(postTagSpec, cancellationToken);
 
@@ -248,6 +291,7 @@ namespace BloggingSystem.Application.Features.Post.Command
 
             // Add new tags
             var existingTagIds = existingPostTags.Select(pt => pt.TagId).ToList();
+            // TODO: Optimize this
             foreach (var tagId in request.TagIds)
             {
                 if (!existingTagIds.Contains(tagId))
@@ -316,11 +360,10 @@ namespace BloggingSystem.Application.Features.Post.Command
             if (post == null)
                 throw new DomainException("Post not found");
 
-            // Add archive event
-            post.AddDomainEvent(new PostArchivedEvent(post.Id, post.AuthorId, post.Title, post.Slug));
+            post.Trash();
 
             // Delete post
-            await _postRepository.DeleteAsync(post, cancellationToken);
+            await _postRepository.UpdateAsync(post, cancellationToken);
 
             // Publish domain events
             await _domainEventService.PublishEventsAsync(post.DomainEvents);
@@ -343,17 +386,20 @@ namespace BloggingSystem.Application.Features.Post.Command
         private readonly IRepository<Domain.Entities.Post> _postRepository;
         private readonly IRepository<Domain.Entities.User> _userRepository;
         private readonly IDomainEventService _domainEventService;
+        private readonly IMapper _mapper;
         private readonly ILogger<PublishPostCommandHandler> _logger;
 
         public PublishPostCommandHandler(
             IRepository<Domain.Entities.Post> postRepository,
             IRepository<Domain.Entities.User> userRepository,
             IDomainEventService domainEventService,
+            IMapper mapper,
             ILogger<PublishPostCommandHandler> logger)
         {
             _postRepository = postRepository;
             _userRepository = userRepository;
             _domainEventService = domainEventService;
+            _mapper = mapper;
             _logger = logger;
         }
 
@@ -367,16 +413,7 @@ namespace BloggingSystem.Application.Features.Post.Command
                 throw new DomainException("Post is already published");
 
             // Update status and set publish date
-            post.Status = "published";
-            post.PublishedAt = DateTime.UtcNow;
-
-            // Add domain event
-            post.AddDomainEvent(new PostPublishedEvent(
-                post.Id,
-                post.AuthorId,
-                post.Title,
-                post.Slug,
-                post.PublishedAt.Value));
+            post.Publish();
 
             // Update post
             await _postRepository.UpdateAsync(post, cancellationToken);
@@ -401,10 +438,79 @@ namespace BloggingSystem.Application.Features.Post.Command
                 CreatedAt = post.CreatedAt,
                 PublishedAt = post.PublishedAt,
                 UpdatedAt = post.UpdatedAt,
+                Author = _mapper.Map<AuthorDto>(author)
             };
         }
     }
 
+    #endregion
+    
+    #region Unpublish Post Command
+    public class UnpublishPostCommand : IRequest<PostDto>
+    {
+        public long Id { get; set; }
+    }
+    public class UnpublishPostCommandHandler : IRequestHandler<UnpublishPostCommand, PostDto>
+    {
+        private readonly IRepository<Domain.Entities.Post> _postRepository;
+        private readonly IRepository<Domain.Entities.User> _userRepository;
+        private readonly IDomainEventService _domainEventService;
+        private readonly ILogger<UnpublishPostCommandHandler> _logger;
+        private readonly IMapper _mapper;
+
+        public UnpublishPostCommandHandler(
+            IRepository<Domain.Entities.Post> postRepository,
+            IRepository<Domain.Entities.User> userRepository,
+            IDomainEventService domainEventService,
+            IMapper mapper,
+            ILogger<UnpublishPostCommandHandler> logger)
+        {
+            _postRepository = postRepository;
+            _userRepository = userRepository;
+            _domainEventService = domainEventService;
+            _logger = logger;
+            _mapper = mapper;
+        }
+
+        public async Task<PostDto> Handle(UnpublishPostCommand request, CancellationToken cancellationToken)
+        {
+            var post = await _postRepository.GetByIdAsync(request.Id, cancellationToken);
+            if (post == null)
+                throw new DomainException("Post not found");
+
+            if (post.Status != "published")
+                throw new DomainException("Post is not published");
+
+            // Update status
+            post.UnPublish();
+
+            // Update post
+            await _postRepository.UpdateAsync(post, cancellationToken);
+
+            // Publish domain events
+            await _domainEventService.PublishEventsAsync(post.DomainEvents);
+
+            // Get author for DTO
+            var author = await _userRepository.GetByIdAsync(post.AuthorId, cancellationToken);
+
+            // Return DTO
+            return new PostDto
+            {
+                Id = post.Id,
+                Title = post.Title,
+                Slug = post.Slug,
+                Excerpt = post.Excerpt,
+                Content = post.Content,
+                FeaturedImageUrl = post.FeaturedImageUrl,
+                Status = post.Status,
+                CommentStatus = post.CommentStatus,
+                CreatedAt = post.CreatedAt,
+                PublishedAt = post.PublishedAt,
+                UpdatedAt = post.UpdatedAt,
+                Author = _mapper.Map<AuthorDto>(author)
+            };
+        }
+    }
     #endregion
 
     #region Archive Post Command
@@ -439,14 +545,10 @@ namespace BloggingSystem.Application.Features.Post.Command
             if (post == null)
                 throw new DomainException("Post not found");
 
-            if (post.Status == "archived")
+            if (post.Status == PostStatus.Trash.ToString())
                 throw new DomainException("Post is already archived");
 
-            // Update status
-            post.Status = "archived";
-
-            // Add domain event
-            post.AddDomainEvent(new PostArchivedEvent(post.Id, post.AuthorId, post.Title, post.Slug));
+            post.Trash();
 
             // Update post
             await _postRepository.UpdateAsync(post, cancellationToken);
@@ -476,5 +578,6 @@ namespace BloggingSystem.Application.Features.Post.Command
     }
 
     #endregion
+    
 
 }

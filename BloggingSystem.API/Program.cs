@@ -3,20 +3,25 @@ using BloggingSystem.API.Filters;
 using BloggingSystem.Application;
 using BloggingSystem.Infrastructure;
 using BloggingSystem.Infrastructure.Authentication;
+using BloggingSystem.Infrastructure.Middlewares;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
+
+builder.Services.AddCompressionServices();
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddApiExceptionFilter();
 builder.Services.AddApplicationServices();
+builder.Services.AddMemoryCache();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 builder.Services.AddPasswordHasher();
+
 
 // Add authentication and authorization services
 builder.Services.AddAuthenticationServices(builder.Configuration);
 builder.Services.AddAuthorizationServices();
-
 builder.Services.AddControllers();
 
 // Add API versioning
@@ -31,6 +36,7 @@ builder.Services.AddApiVersioning(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
+    // Ghi ra file
     c.SwaggerDoc("v1", new OpenApiInfo 
     { 
         Title = "Blogging System API", 
@@ -70,7 +76,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowSpecificOrigin",
         builder => builder
-            .WithOrigins("http://localhost:3000") // Replace with your frontend URL
+            .WithOrigins("http://localhost:5173") // Replace with your frontend URL
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials());
@@ -94,6 +100,12 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseCors("AllowSpecificOrigin");
+
+app.UseResponseCompression();
+
+app.UseAuditLogging();
+
+app.UsePostViewTracking();
 
 app.UseAuthentication();
 

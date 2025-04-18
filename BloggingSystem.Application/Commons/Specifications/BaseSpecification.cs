@@ -55,6 +55,11 @@ namespace BloggingSystem.Application.Commons.Specifications
             IncludeStrings.Add(includeString);
         }
         
+        protected void ThenInclude(Expression<Func<T, object>> includeExpression, bool descending)
+        {
+            ThenByExpressions.Add((includeExpression, descending));
+        }
+        
         /// <summary>
         /// Apply ordering
         /// </summary>

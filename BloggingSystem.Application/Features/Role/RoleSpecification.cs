@@ -24,11 +24,16 @@ public class RoleBySlugSpecification : BaseSpecification<Domain.Entities.Role>
         // Include role users
         AddInclude(r => r.UserRoles);
         
+        // Include role permissions
+        AddInclude(r => r.RolePermissions);
+        
+        // Then include permissions for each role permission
+        AddInclude($"{nameof(Domain.Entities.Role.RolePermissions)}.{nameof(Domain.Entities.RolePermission.Permission)}");
+        
         // Order by role name
         ApplyOrderBy(r => r.Name);
     }
 }
-
 public class RoleByNameSpecification : BaseSpecification<Domain.Entities.Role>
 {
     public RoleByNameSpecification(string name) 
@@ -49,7 +54,9 @@ public class RolesWithUserSpecification : BaseSpecification<Domain.Entities.Role
     {
         // Include role users
         AddInclude(r => r.UserRoles);
-        
+        AddInclude(r => r.RolePermissions);
+        // Inclue Permissions
+        AddInclude($"{nameof(Domain.Entities.Role.RolePermissions)}.{nameof(Domain.Entities.RolePermission.Permission)}");
         // Order by role name
         ApplyOrderBy(r => r.Name);
     }

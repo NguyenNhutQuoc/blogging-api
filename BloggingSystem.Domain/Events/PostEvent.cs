@@ -53,13 +53,21 @@ namespace BloggingSystem.Domain.Events
         public long AuthorId { get; }
         public string Title { get; }
         public string Slug { get; }
+        public string Excerpt {get; }
+        public string FeaturedImageUrl {get;}
+        public string Status {get;}
+        public string CommentStatus {get;}
 
-        public PostUpdatedEvent(long postId, long authorId, string title, string slug)
+        public PostUpdatedEvent(long postId, long authorId, string title, string slug, string excerpt, string featuredImageUrl, string status, string commentStatus)
         {
             PostId = postId;
             AuthorId = authorId;
             Title = title;
             Slug = slug;
+            Excerpt = excerpt;
+            FeaturedImageUrl = featuredImageUrl;
+            Status = status;
+            CommentStatus = commentStatus;
         }
     }
 
@@ -83,42 +91,6 @@ namespace BloggingSystem.Domain.Events
     }
 
     /// <summary>
-    /// Event raised when a comment is added to a post
-    /// </summary>
-    public class CommentAddedEvent : DomainEvent
-    {
-        public long CommentId { get; }
-        public long PostId { get; }
-        public long UserId { get; }
-
-        public CommentAddedEvent(long commentId, long postId, long userId)
-        {
-            CommentId = commentId;
-            PostId = postId;
-            UserId = userId;
-        }
-    }
-    
-    /// <summary>
-    /// Event raised when a comment is updated
-    /// </summary>
-    public class CommentUpdatedEvent : DomainEvent
-    {
-        public long CommentId { get; }
-        public long PostId { get; }
-        public long UserId { get; }
-        public CommentStatus Status { get; }
-
-        public CommentUpdatedEvent(long commentId, long postId, long userId, CommentStatus status)
-        {
-            CommentId = commentId;
-            PostId = postId;
-            UserId = userId;
-            Status = status;
-        }
-    }
-
-    /// <summary>
     /// Event raised when a post view is recorded
     /// </summary>
     public class PostViewedEvent : DomainEvent
@@ -132,6 +104,48 @@ namespace BloggingSystem.Domain.Events
             PostId = postId;
             IPAddress = ipAddress;
             UserAgent = userAgent;
+        }
+    }
+    
+    public class PostUnpublishedEvent : DomainEvent
+    {
+        public long PostId { get; }
+        public long AuthorId { get; }
+        public string Title { get; }
+        public string Slug { get; }
+
+        public PostUnpublishedEvent(long postId, long authorId, string title, string slug)
+        {
+            PostId = postId;
+            AuthorId = authorId;
+            Title = title;
+            Slug = slug;
+        }
+    }
+    
+    public class PostRestoredFromRevisionEvent : DomainEvent
+    {
+        public long PostId { get; }
+        public long UserId { get; }
+        public long RevisionId { get; }
+        public int RevisionNumber { get; }
+        public string OldContent { get; }
+        public string RestoredContent { get; }
+
+        public PostRestoredFromRevisionEvent(
+            long postId,
+            long userId,
+            long revisionId,
+            int revisionNumber,
+            string oldContent,
+            string restoredContent)
+        {
+            PostId = postId;
+            UserId = userId;
+            RevisionId = revisionId;
+            RevisionNumber = revisionNumber;
+            OldContent = oldContent;
+            RestoredContent = restoredContent;
         }
     }
 }

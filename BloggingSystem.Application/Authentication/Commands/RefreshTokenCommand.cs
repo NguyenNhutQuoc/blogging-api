@@ -63,7 +63,7 @@ namespace BloggingSystem.Application.Authentication.Commands
             var (accessToken, newRefreshToken) = _jwtGenerator.GenerateTokens(user, roles, permissions);
 
             // Update session
-            session.Update(newRefreshToken, request.IpAddress, request.UserAgent, DateTime.UtcNow.AddMinutes(5));
+            session.Update(newRefreshToken, request.IpAddress, request.UserAgent, DateTime.UtcNow.AddDays(7));
 
             await _sessionRepository.UpdateAsync(session, cancellationToken);
             

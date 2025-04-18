@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using AutoMapper;
 using BloggingSystem.Application.Commons.Interfaces;
 using BloggingSystem.Application.Features.Post;
@@ -89,6 +84,8 @@ namespace BloggingSystem.Application.Queries
             var spec = new PublishedPostsSpecification(request.PageNumber, request.PageSize);
             var totalCount = await _postRepository.CountAsync(new PublishedPostsSpecification(), cancellationToken);
             var posts = await _postRepository.ListAsync(spec, cancellationToken);
+            
+            // View Word Count
 
             return new PaginatedResponseDto<PostSummaryDto>
             {
@@ -226,6 +223,38 @@ namespace BloggingSystem.Application.Queries
                 TotalCount = totalCount,
                 TotalPages = (int)Math.Ceiling(totalCount / (double)request.PageSize)
             };
+        }
+    }
+
+    #endregion
+    
+    #region Get Post Views Query
+
+    public class GetPostViewsQuery : IRequest<long?>
+    {
+        public long PostId { get; set; }
+    }
+
+    public class GetPostViewsQueryHandler : IRequestHandler<GetPostViewsQuery, long?>
+    {
+        private readonly IRepository<Domain.Entities.Post> _postRepository;
+        private readonly ILogger<GetPostViewsQueryHandler> _logger;
+
+        public GetPostViewsQueryHandler(
+            IRepository<Domain.Entities.Post> postRepository,
+            ILogger<GetPostViewsQueryHandler> logger)
+        {
+            _postRepository = postRepository;
+            _logger = logger;
+        }
+
+        public async Task<long?> Handle(GetPostViewsQuery request, CancellationToken cancellationToken)
+        {
+            var post = await _postRepository.GetByIdAsync(request.PostId, cancellationToken);
+            if (post == null)
+                throw new NotFoundException("Post", request.PostId);
+
+            return post.ViewsCount;
         }
     }
 
@@ -382,5 +411,156 @@ namespace BloggingSystem.Application.Queries
         }
     }
 
+    #endregion
+
+    #region Search Posts By Author
+    public class SearchPostsByAuthorQuery : IRequest<PaginatedResponseDto<PostSummaryDto>>
+    {
+        public long AuthorId { get; set; }
+        public string SearchTerm { get; set; }
+        public int PageNumber { get; set; } = 1;
+        public int PageSize { get; set; } = 10;
+    }
+    
+    public class SearchPostsByAuthorQueryHandler : IRequestHandler<SearchPostsByAuthorQuery, PaginatedResponseDto<PostSummaryDto>>
+    {
+        private readonly IRepository<Post> _postRepository;
+        private readonly IRepository<User> _userRepository;
+        private readonly IMapper _mapper;
+        private readonly ILogger<SearchPostsByAuthorQueryHandler> _logger;
+
+        public SearchPostsByAuthorQueryHandler(
+            IRepository<Post> postRepository,
+            IRepository<User> userRepository,
+            IMapper mapper,
+            ILogger<SearchPostsByAuthorQueryHandler> logger)
+        {
+            _postRepository = postRepository;
+            _userRepository = userRepository;
+            _mapper = mapper;
+            _logger = logger;
+        }
+
+        public async Task<PaginatedResponseDto<PostSummaryDto>> Handle(SearchPostsByAuthorQuery request,
+            CancellationToken cancellationToken)
+        {
+            var user = await _userRepository.GetByIdAsync(request.AuthorId, cancellationToken);
+            if (user == null)
+                throw new NotFoundException(nameof(User), request.AuthorId);
+
+            var spec = new PostsByAuthorSearchSpecification(user.Id, request.SearchTerm, request.PageNumber, request.PageSize);
+            var totalCount =
+                await _postRepository.CountAsync(new PostsByAuthorSearchSpecification(user.Id, request.SearchTerm), cancellationToken);
+            var posts = await _postRepository.ListAsync(spec, cancellationToken);
+
+            return new PaginatedResponseDto<PostSummaryDto>
+            {
+                Data = _mapper.Map<List<PostSummaryDto>>(posts),
+                PageIndex = request.PageNumber,
+                PageSize = request.PageSize,
+                TotalCount = totalCount,
+                TotalPages = (int)Math.Ceiling(totalCount / (double)request.PageSize)
+            };
+        }
+    }
+    
+
+    #endregion
+    
+    #region Get Posts Published By Author
+    public class GetPostsPublishedByAuthorQuery : IRequest<PaginatedResponseDto<PostSummaryDto>>
+    {
+        public long AuthorId { get; set; }
+        public int PageNumber { get; set; } = 1;
+        public int PageSize { get; set; } = 10;
+    }
+
+    public class
+        GetPostsPublishedByAuthorQueryHandler : IRequestHandler<GetPostsPublishedByAuthorQuery,
+        PaginatedResponseDto<PostSummaryDto>>
+    {
+        private readonly IRepository<Post> _postRepository;
+        private readonly IRepository<User> _userRepository;
+        private readonly IMapper _mapper;
+        private readonly ILogger<GetPostsPublishedByAuthorQueryHandler> _logger;
+        public GetPostsPublishedByAuthorQueryHandler(
+            IRepository<Post> postRepository,
+            IRepository<User> userRepository,
+            IMapper mapper,
+            ILogger<GetPostsPublishedByAuthorQueryHandler> logger)
+        {
+            _postRepository = postRepository;
+            _userRepository = userRepository;
+            _mapper = mapper;
+            _logger = logger;
+        }
+        
+        public async Task<PaginatedResponseDto<PostSummaryDto>> Handle(GetPostsPublishedByAuthorQuery request,
+            CancellationToken cancellationToken)
+        {
+            var user = await _userRepository.GetByIdAsync(request.AuthorId, cancellationToken);
+            if (user == null)
+                throw new NotFoundException(nameof(User), request.AuthorId);
+
+            var spec = new PublishedPostsByAuthorSpecification(request.AuthorId, request.PageNumber, request.PageSize);
+            var totalCount =
+                await _postRepository.CountAsync(new PublishedPostsByAuthorSpecification(request.AuthorId),
+                    cancellationToken);
+            var posts = await _postRepository.ListAsync(spec, cancellationToken);
+
+            return new PaginatedResponseDto<PostSummaryDto>
+            {
+                Data = _mapper.Map<List<PostSummaryDto>>(posts),
+                PageIndex = request.PageNumber,
+                PageSize = request.PageSize,
+                TotalCount = totalCount,
+                TotalPages = (int)Math.Ceiling(totalCount / (double)request.PageSize)
+            };
+        }
+    }
+    #endregion
+
+    #region  Search Post Published
+    public class SearchPostsPublishedQuery :  IRequest<PaginatedResponseDto<PostSummaryDto>>
+    {
+        public string SearchTerm { get; set; }
+        public int PageNumber { get; set; } = 1;
+        public int PageSize { get; set; } = 10;
+    }
+    
+    public class SearchPostsPublishedQueryHandler : IRequestHandler<SearchPostsPublishedQuery, PaginatedResponseDto<PostSummaryDto>>
+    {
+        private readonly IRepository<Post> _postRepository;
+        private readonly IMapper _mapper;
+        private readonly ILogger<SearchPostsPublishedQueryHandler> _logger;
+
+        public SearchPostsPublishedQueryHandler(
+            IRepository<Post> postRepository,
+            IMapper mapper,
+            ILogger<SearchPostsPublishedQueryHandler> logger)
+        {
+            _postRepository = postRepository;
+            _mapper = mapper;
+            _logger = logger;
+        }
+
+        public async Task<PaginatedResponseDto<PostSummaryDto>> Handle(SearchPostsPublishedQuery request,
+            CancellationToken cancellationToken)
+        {
+            var spec = new PostSearchSpecification(request.SearchTerm, request.PageNumber, request.PageSize);
+            var totalCount =
+                await _postRepository.CountAsync(new PostSearchSpecification(request.SearchTerm), cancellationToken);
+            var posts = await _postRepository.ListAsync(spec, cancellationToken);
+
+            return new PaginatedResponseDto<PostSummaryDto>
+            {
+                Data = _mapper.Map<List<PostSummaryDto>>(posts),
+                PageIndex = request.PageNumber,
+                PageSize = request.PageSize,
+                TotalCount = totalCount,
+                TotalPages = (int)Math.Ceiling(totalCount / (double)request.PageSize)
+            };
+        }
+    }
     #endregion
 }
